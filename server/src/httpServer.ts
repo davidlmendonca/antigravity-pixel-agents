@@ -239,20 +239,141 @@ function safeSend(
 // ── CRM / External Agent Webhook Route ──────────────────────────
 
 function registerCrmWebhookRoute(app: FastifyInstance, options: HttpServerOptions): void {
+  // Pre-seed default Capture xCRM Agents
+  app.get('/api/crm/seed', async (_request, reply) => {
+    const defaultAgents = [
+      { name: 'Lary (Secretária IA & Vendas)', role: 'Atendendo WhatsApp / Orçamentos' },
+      { name: 'Mila (Assistente de Conhecimento)', role: 'Base de Conhecimento / Suporte' },
+      { name: 'Audit (Auditor de Sistema)', role: 'Auditoria Financeira & Saúde RLS' },
+      { name: 'Reveel (Gerenciador de Galerias)', role: 'Processamento de Mídias & Fotos S3' },
+      { name: 'Flowly (Automação de Leads)', role: 'Disparo de Campanhas & Leads' },
+    ];
+
+    const createdIds: number[] = [];
+
+    for (const def of defaultAgents) {
+      // Check if already exists
+      let exists = false;
+      for (const [, agent] of options.store) {
+        if (agent.agentName === def.name) {
+          exists = true;
+          break;
+        }
+      }
+
+      if (!exists) {
+        const id = options.store.nextAgentId.current++;
+        const newAgent: AgentState = {
+          id,
+          sessionId: `crm-agent-${id}`,
+          isExternal: true,
+          projectDir: process.cwd(),
+          jsonlFile: '',
+          fileOffset: 0,
+          lineBuffer: '',
+          activeToolIds: new Set(['crm-tool']),
+          activeToolStatuses: new Map([['crm-tool', def.role]]),
+          activeToolNames: new Map([['crm-tool', 'writing']]),
+          activeSubagentToolIds: new Map(),
+          activeSubagentToolNames: new Map(),
+          backgroundAgentToolIds: new Set(),
+          isWaiting: false,
+          permissionSent: false,
+          hadToolsInTurn: true,
+          agentName: def.name,
+          teamName: 'Capture xCRM',
+          lastDataAt: Date.now(),
+          linesProcessed: 0,
+          seenUnknownRecordTypes: new Set(),
+          hookDelivered: true,
+          hooksOnly: true,
+          contextTokens: 0,
+          maxContextTokens: 200000,
+        };
+        options.store.set(id, newAgent);
+        createdIds.push(id);
+      }
+    }
+
+    return reply.send({ success: true, seeded: createdIds.length, agents: defaultAgents });
+  });
+
+  // Webhook endpoint for external CRM agent triggers
   app.post('/api/agent-event', async (request, reply) => {
     const body = (request.body ?? {}) as Record<string, unknown>;
-    const agentName = (body.agentName as string) || (body.name as string) || 'Secretária IA Lary';
-    const status = (body.status as string) || (body.message as string) || 'Atendendo cliente';
+    const rawName = (body.agentName as string) || (body.name as string) || '';
+
+    // Auto-rename unnamed/generic agents to Lary-style
+    let agentName = rawName;
+    if (!agentName || agentName.toLowerCase().includes('agent') || agentName.toLowerCase().includes('bot') || agentName.toLowerCase().includes('assistant') || agentName.trim() === '') {
+      agentName = 'Lary (Secretária IA)';
+    }
+
+    const status = (body.status as string) || (body.message as string) || 'Atendendo no WhatsApp';
     const action = (body.action as string) || 'writing';
+
+    // Find or create agent in store
+    let targetAgentId: number | undefined;
+    for (const [id, agent] of options.store) {
+      if (agent.agentName?.toLowerCase() === agentName.toLowerCase()) {
+        targetAgentId = id;
+        break;
+      }
+    }
+
+    if (!targetAgentId) {
+      targetAgentId = options.store.nextAgentId.current++;
+      const newAgent: AgentState = {
+        id: targetAgentId,
+        sessionId: `crm-${Date.now()}-${targetAgentId}`,
+        isExternal: true,
+        projectDir: process.cwd(),
+        jsonlFile: '',
+        fileOffset: 0,
+        lineBuffer: '',
+        activeToolIds: new Set(['crm-tool']),
+        activeToolStatuses: new Map([['crm-tool', status]]),
+        activeToolNames: new Map([['crm-tool', action]]),
+        activeSubagentToolIds: new Map(),
+        activeSubagentToolNames: new Map(),
+        backgroundAgentToolIds: new Set(),
+        isWaiting: false,
+        permissionSent: false,
+        hadToolsInTurn: true,
+        agentName,
+        teamName: 'Capture xCRM',
+        lastDataAt: Date.now(),
+        linesProcessed: 0,
+        seenUnknownRecordTypes: new Set(),
+        hookDelivered: true,
+        hooksOnly: true,
+        contextTokens: 0,
+        maxContextTokens: 200000,
+      };
+      options.store.set(targetAgentId, newAgent);
+    } else {
+      const existing = options.store.get(targetAgentId);
+      if (existing) {
+        existing.activeToolStatuses.set('crm-tool', status);
+        existing.lastDataAt = Date.now();
+        options.store.broadcast({
+          type: 'agentStatus',
+          id: targetAgentId,
+          status: 'active',
+          toolStatus: status,
+        });
+      }
+    }
 
     options.store.broadcast({
       type: 'crmAgentEvent',
+      agentId: targetAgentId,
       agentName,
       status,
       action,
       timestamp: Date.now(),
     });
 
-    return reply.send({ success: true, agentName, status, timestamp: Date.now() });
+    return reply.send({ success: true, agentId: targetAgentId, agentName, status, timestamp: Date.now() });
   });
 }
