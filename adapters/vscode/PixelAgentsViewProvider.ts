@@ -34,7 +34,7 @@ import {
   writeLayoutToFile,
 } from '../../server/src/layoutPersistence.js';
 import { PathSet } from '../../server/src/pathKey.js';
-import { claudeProvider, copyHookScript } from '../../server/src/providers/index.js';
+import { antigravityProvider, copyHookScript } from '../../server/src/providers/index.js';
 import { PixelAgentsServer } from '../../server/src/server.js';
 import {
   getProjectDirPath,
@@ -161,7 +161,7 @@ export class PixelAgentsViewProvider implements vscode.WebviewViewProvider {
     });
 
     // Create shared runtime (owns timer Maps, scanners, hook handler, dismissal tracker)
-    this.runtime = new AgentRuntime(this.store, claudeProvider);
+    this.runtime = new AgentRuntime(this.store, antigravityProvider);
 
     this.initServer();
   }
@@ -208,7 +208,7 @@ export class PixelAgentsViewProvider implements vscode.WebviewViewProvider {
         const hooksEnabled = this.adapter.getSetting<boolean>(GLOBAL_KEY_HOOKS_ENABLED, true);
         this.runtime.hooksEnabled.current = hooksEnabled;
         if (hooksEnabled) {
-          void claudeProvider.installHooks(`http://127.0.0.1:${config.port}`, config.token);
+          void antigravityProvider.installHooks(`http://127.0.0.1:${config.port}`, config.token);
           if (!copyHookScript(this.context.extensionPath)) {
             console.warn('[Pixel Agents] Hook script not copied, hooks may not fire');
           }
@@ -299,7 +299,7 @@ export class PixelAgentsViewProvider implements vscode.WebviewViewProvider {
         this.runtime.hooksEnabled.current = enabled;
         if (enabled) {
           const serverConfig = this.pixelAgentsServer?.getConfig();
-          void claudeProvider.installHooks(
+          void antigravityProvider.installHooks(
             serverConfig ? `http://127.0.0.1:${serverConfig.port}` : '',
             serverConfig?.token ?? '',
           );
@@ -310,7 +310,7 @@ export class PixelAgentsViewProvider implements vscode.WebviewViewProvider {
               : '[Pixel Agents] Hooks NOT fully enabled, hook script missing',
           );
         } else {
-          void claudeProvider.uninstallHooks();
+          void antigravityProvider.uninstallHooks();
           console.log('[Pixel Agents] Hooks disabled by user');
         }
       } else if (message.type === 'setHooksInfoShown') {
@@ -373,8 +373,8 @@ export class PixelAgentsViewProvider implements vscode.WebviewViewProvider {
         // from the first frame.
         this.webview?.postMessage({
           type: 'providerCapabilities',
-          readingTools: [...claudeProvider.readingTools],
-          subagentToolNames: [...claudeProvider.subagentToolNames],
+          readingTools: [...antigravityProvider.readingTools],
+          subagentToolNames: [...antigravityProvider.subagentToolNames],
         });
 
         // Settings + folder→Area mappings MUST be dispatched BEFORE restoreAgents

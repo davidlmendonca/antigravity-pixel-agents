@@ -121,6 +121,11 @@ function browserMockAssetsPlugin(): Plugin {
 
 export default defineConfig({
   plugins: [tailwindcss(), react(), browserMockAssetsPlugin()],
+  css: {
+    postcss: {
+      plugins: [],
+    },
+  },
   build: {
     outDir: '../dist/webview',
     emptyOutDir: true,

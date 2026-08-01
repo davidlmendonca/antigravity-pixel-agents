@@ -81,6 +81,7 @@ export async function createHttpServer(options: HttpServerOptions): Promise<Http
 
   registerHealthRoute(app);
   registerHookRoute(app, options);
+  registerCrmWebhookRoute(app, options);
   registerWebSocketRoute(app, options);
 
   // ── Listen ──────────────────────────────────────────────────
@@ -233,4 +234,25 @@ function safeSend(
   if (socket.readyState === 1) {
     socket.send(JSON.stringify(message));
   }
+}
+
+// ── CRM / External Agent Webhook Route ──────────────────────────
+
+function registerCrmWebhookRoute(app: FastifyInstance, options: HttpServerOptions): void {
+  app.post('/api/agent-event', async (request, reply) => {
+    const body = (request.body ?? {}) as Record<string, unknown>;
+    const agentName = (body.agentName as string) || (body.name as string) || 'Secretária IA Lary';
+    const status = (body.status as string) || (body.message as string) || 'Atendendo cliente';
+    const action = (body.action as string) || 'writing';
+
+    options.store.broadcast({
+      type: 'crmAgentEvent',
+      agentName,
+      status,
+      action,
+      timestamp: Date.now(),
+    });
+
+    return reply.send({ success: true, agentName, status, timestamp: Date.now() });
+  });
 }
