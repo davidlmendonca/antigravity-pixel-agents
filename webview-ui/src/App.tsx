@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { toMajorMinor } from './changelogData.js';
+import { type AgentInspectorData,AgentInspectorModal } from './components/AgentInspectorModal.js';
 import { BottomToolbar } from './components/BottomToolbar.js';
 import { ChangelogModal } from './components/ChangelogModal.js';
 import { ConnectionIndicator } from './components/ConnectionIndicator.js';
@@ -198,17 +199,32 @@ function App() {
     editor.handleToggleEditMode,
   );
 
+  const [inspectorAgent, setInspectorAgent] = useState<AgentInspectorData | null>(null);
+
   const handleCloseAgent = useCallback((id: number) => {
     transport.send({ type: 'closeAgent', id });
   }, []);
 
   const handleClick = useCallback((agentId: number) => {
-    // If clicked agent is a sub-agent, focus the parent's terminal instead
     const os = getOfficeState();
     const meta = os.subagentMeta.get(agentId);
     const focusId = meta ? meta.parentAgentId : agentId;
-    transport.send({ type: 'focusAgent', id: focusId });
-  }, []);
+
+    const ch = os.characters.get(focusId);
+    const currentStatus = agentStatuses[focusId];
+    const tools = agentTools[focusId];
+    const activeToolName = tools && tools.length > 0 ? tools[tools.length - 1].status : (ch?.currentTool || undefined);
+
+    setInspectorAgent({
+      id: focusId,
+      name: ch?.folderName || `Agente #${focusId}`,
+      teamName: ch?.teamName || 'Google Antigravity',
+      status: currentStatus || 'Ativo / Em Execução',
+      activeToolName,
+      isWaiting: ch?.bubbleType === 'waiting' || ch?.bubbleType === 'permission',
+      permissionSent: ch?.bubbleType === 'permission',
+    });
+  }, [agentStatuses, agentTools]);
 
   const officeState = getOfficeState();
 
@@ -532,6 +548,8 @@ function App() {
       {showMigrationNotice && (
         <MigrationNotice onDismiss={() => setMigrationNoticeDismissed(true)} />
       )}
+
+      <AgentInspectorModal agent={inspectorAgent} onClose={() => setInspectorAgent(null)} />
     </div>
   );
 }
